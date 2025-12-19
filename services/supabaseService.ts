@@ -626,8 +626,16 @@ export interface LocationStats {
   top_cookie_count: number;
 }
 
+export interface PaginatedProspects {
+  data: ScoutingProspect[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 /**
- * Fetch scouting prospects with optional filters
+ * Fetch scouting prospects with optional filters and pagination
  */
 export async function getScoutingProspects(options?: {
   limit?: number;
@@ -636,6 +644,7 @@ export async function getScoutingProspects(options?: {
   minScoutScore?: number;
   verifiedOnly?: boolean;
   hasRanking?: boolean;
+  status?: string;
 }): Promise<ScoutingProspect[]> {
   let query = supabase
     .from('scouting_prospects')
@@ -654,6 +663,9 @@ export async function getScoutingProspects(options?: {
   if (options?.hasRanking) {
     query = query.or('kaito_rank.not.is.null,cookie_rank.not.is.null,ethos_rank.not.is.null');
   }
+  if (options?.status) {
+    query = query.eq('status', options.status);
+  }
   if (options?.limit) {
     query = query.limit(options.limit);
   }
@@ -669,6 +681,78 @@ export async function getScoutingProspects(options?: {
   }
 
   return data || [];
+}
+
+/**
+ * Fetch scouting prospects with pagination info (total count)
+ */
+export async function getScoutingProspectsPaginated(options?: {
+  page?: number;
+  pageSize?: number;
+  location?: string;
+  minScoutScore?: number;
+  verifiedOnly?: boolean;
+  hasRanking?: boolean;
+  status?: string;
+}): Promise<PaginatedProspects> {
+  const page = options?.page || 1;
+  const pageSize = options?.pageSize || 50;
+  const offset = (page - 1) * pageSize;
+
+  // Build the base query for counting
+  let countQuery = supabase
+    .from('scouting_prospects')
+    .select('*', { count: 'exact', head: true });
+
+  // Build the data query
+  let dataQuery = supabase
+    .from('scouting_prospects')
+    .select('*')
+    .order('scout_score', { ascending: false, nullsFirst: false })
+    .range(offset, offset + pageSize - 1);
+
+  // Apply filters to both queries
+  if (options?.location) {
+    countQuery = countQuery.eq('location', options.location);
+    dataQuery = dataQuery.eq('location', options.location);
+  }
+  if (options?.minScoutScore) {
+    countQuery = countQuery.gte('scout_score', options.minScoutScore);
+    dataQuery = dataQuery.gte('scout_score', options.minScoutScore);
+  }
+  if (options?.verifiedOnly) {
+    countQuery = countQuery.eq('verified', true);
+    dataQuery = dataQuery.eq('verified', true);
+  }
+  if (options?.hasRanking) {
+    countQuery = countQuery.or('kaito_rank.not.is.null,cookie_rank.not.is.null,ethos_rank.not.is.null');
+    dataQuery = dataQuery.or('kaito_rank.not.is.null,cookie_rank.not.is.null,ethos_rank.not.is.null');
+  }
+  if (options?.status) {
+    countQuery = countQuery.eq('status', options.status);
+    dataQuery = dataQuery.eq('status', options.status);
+  }
+
+  // Execute both queries in parallel
+  const [countResult, dataResult] = await Promise.all([countQuery, dataQuery]);
+
+  if (countResult.error) {
+    console.error('Error counting prospects:', countResult.error);
+  }
+  if (dataResult.error) {
+    console.error('Error fetching prospects:', dataResult.error);
+  }
+
+  const totalCount = countResult.count || 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  return {
+    data: dataResult.data || [],
+    totalCount,
+    page,
+    pageSize,
+    totalPages,
+  };
 }
 
 /**

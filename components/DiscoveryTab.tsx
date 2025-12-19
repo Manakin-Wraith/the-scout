@@ -2,16 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, Filter, MapPin, Trophy, CheckCircle, Users, 
   ExternalLink, Star, TrendingUp, Globe, Loader2,
-  ChevronDown, X, UserPlus, Mail
+  ChevronDown, ChevronLeft, ChevronRight, X, UserPlus, Mail
 } from 'lucide-react';
 import { 
-  getScoutingProspects, 
+  getScoutingProspectsPaginated, 
   getScoutingStats, 
   getProspectsByLocation,
   updateProspectStatus,
   ScoutingProspect,
   ScoutingStats,
-  LocationStats
+  LocationStats,
+  PaginatedProspects
 } from '../services/supabaseService';
 import ScoreCard from './ScoreCard';
 import AddToListDropdown from './AddToListDropdown';
@@ -26,13 +27,20 @@ interface DiscoveryTabProps {
   onFilterApplied?: () => void;
 }
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
 const DiscoveryTab: React.FC<DiscoveryTabProps> = ({ initialStatusFilter, onFilterApplied }) => {
   // Data state
   const [prospects, setProspects] = useState<ScoutingProspect[]>([]);
   const [stats, setStats] = useState<ScoutingStats | null>(null);
   const [locations, setLocations] = useState<LocationStats[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   
   // Filter state
   const [sortMode, setSortMode] = useState<SortMode>('score');
@@ -48,76 +56,91 @@ const DiscoveryTab: React.FC<DiscoveryTabProps> = ({ initialStatusFilter, onFilt
   // UI state
   const [selectedProspect, setSelectedProspect] = useState<ScoutingProspect | null>(null);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-  const [page, setPage] = useState(0);
-  const PAGE_SIZE = 50;
 
-  // Load initial data
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [prospectsData, statsData, locationsData] = await Promise.all([
-          getScoutingProspects({ limit: PAGE_SIZE, offset: 0 }),
-          getScoutingStats(),
-          getProspectsByLocation()
-        ]);
-        setProspects(prospectsData);
-        setStats(statsData);
-        setLocations(locationsData);
-      } catch (error) {
-        console.error('Failed to load discovery data:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
-
-  // Reload when filters change
-  useEffect(() => {
-    async function reloadProspects() {
-      if (loading) return;
-      setLoadingMore(true);
-      try {
-        const data = await getScoutingProspects({
-          limit: PAGE_SIZE,
-          offset: 0,
-          location: locationFilter || undefined,
-          minScoutScore: minScore || undefined,
-          verifiedOnly: verifiedOnly || undefined,
-          hasRanking: rankedOnly || undefined,
-        });
-        setProspects(data);
-        setPage(0);
-      } catch (error) {
-        console.error('Failed to reload prospects:', error);
-      } finally {
-        setLoadingMore(false);
-      }
-    }
-    reloadProspects();
-  }, [locationFilter, verifiedOnly, rankedOnly, minScore]);
-
-  // Load more prospects
-  const loadMore = async () => {
-    setLoadingMore(true);
+  // Load prospects with pagination
+  const loadProspects = async (page: number, size: number) => {
+    setLoading(true);
     try {
-      const newPage = page + 1;
-      const data = await getScoutingProspects({
-        limit: PAGE_SIZE,
-        offset: newPage * PAGE_SIZE,
+      const result = await getScoutingProspectsPaginated({
+        page,
+        pageSize: size,
         location: locationFilter || undefined,
         minScoutScore: minScore || undefined,
         verifiedOnly: verifiedOnly || undefined,
         hasRanking: rankedOnly || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
       });
-      setProspects(prev => [...prev, ...data]);
-      setPage(newPage);
+      setProspects(result.data);
+      setTotalCount(result.totalCount);
+      setTotalPages(result.totalPages);
+      setCurrentPage(result.page);
     } catch (error) {
-      console.error('Failed to load more:', error);
+      console.error('Failed to load prospects:', error);
     } finally {
-      setLoadingMore(false);
+      setLoading(false);
     }
+  };
+
+  // Load initial data
+  useEffect(() => {
+    async function loadInitialData() {
+      try {
+        const [statsData, locationsData] = await Promise.all([
+          getScoutingStats(),
+          getProspectsByLocation()
+        ]);
+        setStats(statsData);
+        setLocations(locationsData);
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+      }
+    }
+    loadInitialData();
+    loadProspects(1, pageSize);
+  }, []);
+
+  // Reload when filters change
+  useEffect(() => {
+    loadProspects(1, pageSize);
+  }, [locationFilter, verifiedOnly, rankedOnly, minScore, statusFilter]);
+
+  // Handle page change
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      loadProspects(page, pageSize);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Handle page size change
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    loadProspects(1, newSize);
+  };
+
+  // Generate page numbers to display
+  const getPageNumbers = (): (number | string)[] => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible + 2) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      
+      if (currentPage > 3) pages.push('...');
+      
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      
+      for (let i = start; i <= end; i++) pages.push(i);
+      
+      if (currentPage < totalPages - 2) pages.push('...');
+      
+      pages.push(totalPages);
+    }
+    
+    return pages;
   };
 
   // Filter and sort prospects
@@ -406,12 +429,75 @@ const DiscoveryTab: React.FC<DiscoveryTabProps> = ({ initialStatusFilter, onFilt
         </div>
       </div>
 
+      {/* Pagination Controls - Top */}
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* Page Size Selector */}
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-400">Show:</span>
+          <div className="flex gap-1">
+            {PAGE_SIZE_OPTIONS.map(size => (
+              <button
+                key={size}
+                onClick={() => handlePageSizeChange(size)}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                  pageSize === size
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                }`}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Page Info */}
+        <div className="text-sm text-slate-400 font-mono">
+          Showing <span className="text-cyan-400 font-bold">{((currentPage - 1) * pageSize) + 1}</span>-<span className="text-cyan-400 font-bold">{Math.min(currentPage * pageSize, totalCount)}</span> of <span className="text-cyan-400 font-bold">{totalCount.toLocaleString()}</span> prospects
+        </div>
+
+        {/* Page Navigation */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1 || loading}
+            className="p-2 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          
+          {getPageNumbers().map((pageNum, idx) => (
+            typeof pageNum === 'number' ? (
+              <button
+                key={idx}
+                onClick={() => goToPage(pageNum)}
+                disabled={loading}
+                className={`min-w-[36px] h-9 rounded text-sm font-medium transition-all ${
+                  currentPage === pageNum
+                    ? 'bg-cyan-500 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                {pageNum}
+              </button>
+            ) : (
+              <span key={idx} className="px-2 text-slate-500">...</span>
+            )
+          ))}
+          
+          <button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages || loading}
+            className="p-2 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       {/* Prospects Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filteredProspects
-          .filter(p => !locationFilter || p.location === locationFilter)
-          .slice(0, (page + 1) * PAGE_SIZE)
-          .map((prospect) => (
+        {filteredProspects.map((prospect) => (
           <div 
             key={prospect.id} 
             className={`group bg-slate-900 border transition-all duration-300 rounded-lg p-5 cursor-pointer ${
@@ -536,23 +622,50 @@ const DiscoveryTab: React.FC<DiscoveryTabProps> = ({ initialStatusFilter, onFilt
         ))}
       </div>
 
-      {/* Load More */}
-      {filteredProspects.length > (page + 1) * PAGE_SIZE && (
-        <div className="text-center py-4">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {loadingMore ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading...
-              </span>
-            ) : (
-              `Load More (${filteredProspects.length - (page + 1) * PAGE_SIZE} remaining)`
-            )}
-          </button>
+      {/* Pagination Controls - Bottom */}
+      {totalPages > 1 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* Page Info */}
+          <div className="text-sm text-slate-400 font-mono">
+            Page <span className="text-cyan-400 font-bold">{currentPage}</span> of <span className="text-cyan-400 font-bold">{totalPages}</span>
+          </div>
+
+          {/* Page Navigation */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => goToPage(1)}
+              disabled={currentPage === 1 || loading}
+              className="px-3 py-1.5 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+            >
+              First
+            </button>
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1 || loading}
+              className="p-2 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            
+            <span className="px-4 text-sm text-slate-300 font-mono">
+              {currentPage} / {totalPages}
+            </span>
+            
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages || loading}
+              className="p-2 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => goToPage(totalPages)}
+              disabled={currentPage === totalPages || loading}
+              className="px-3 py-1.5 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+            >
+              Last
+            </button>
+          </div>
         </div>
       )}
 
