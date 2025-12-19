@@ -15,11 +15,15 @@ import { TabView } from './types';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabView>('dashboard');
+  const [discoveryFilter, setDiscoveryFilter] = useState<string | undefined>(undefined);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigateToDiscovery={(filter) => {
+          setDiscoveryFilter(filter);
+          setActiveTab('discovery');
+        }} />;
       case 'roster':
         return <RosterTab />;
       case 'goldmine':
@@ -37,7 +41,7 @@ const App: React.FC = () => {
       case 'shortlists':
         return <ShortlistTab />;
       case 'discovery':
-        return <DiscoveryTab />;
+        return <DiscoveryTab initialStatusFilter={discoveryFilter} onFilterApplied={() => setDiscoveryFilter(undefined)} />;
       default:
         return <div>Not found</div>;
     }

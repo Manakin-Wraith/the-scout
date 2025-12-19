@@ -66,6 +66,32 @@
       .animate-slide-in-right {
         animation: slide-in-right 0.3s ease-out forwards;
       }
+      
+      /* Subtle pulse animation for highlighted cards */
+      @keyframes pulse-subtle {
+        0%, 100% {
+          box-shadow: 0 0 20px rgba(59, 130, 246, 0.15), inset 0 1px 0 rgba(59, 130, 246, 0.1);
+        }
+        50% {
+          box-shadow: 0 0 30px rgba(59, 130, 246, 0.25), inset 0 1px 0 rgba(59, 130, 246, 0.2);
+        }
+      }
+      .animate-pulse-subtle {
+        animation: pulse-subtle 2s ease-in-out infinite;
+      }
+      
+      /* Horizontal bounce for chevron */
+      @keyframes bounce-x {
+        0%, 100% {
+          transform: translateX(0);
+        }
+        50% {
+          transform: translateX(4px);
+        }
+      }
+      .animate-bounce-x {
+        animation: bounce-x 1s ease-in-out infinite;
+      }
     </style>
   <script type="importmap">
 {

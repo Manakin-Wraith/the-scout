@@ -21,7 +21,12 @@ import { prospectToShortlistItem } from '../services/shortlistService';
 type SortMode = 'score' | 'kaito' | 'cookie' | 'ethos' | 'followers';
 type StatusFilter = 'all' | 'prospect' | 'contacted';
 
-const DiscoveryTab: React.FC = () => {
+interface DiscoveryTabProps {
+  initialStatusFilter?: string;
+  onFilterApplied?: () => void;
+}
+
+const DiscoveryTab: React.FC<DiscoveryTabProps> = ({ initialStatusFilter, onFilterApplied }) => {
   // Data state
   const [prospects, setProspects] = useState<ScoutingProspect[]>([]);
   const [stats, setStats] = useState<ScoutingStats | null>(null);
@@ -36,7 +41,9 @@ const DiscoveryTab: React.FC = () => {
   const [rankedOnly, setRankedOnly] = useState(false);
   const [minScore, setMinScore] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    (initialStatusFilter as StatusFilter) || 'all'
+  );
   
   // UI state
   const [selectedProspect, setSelectedProspect] = useState<ScoutingProspect | null>(null);

@@ -798,6 +798,67 @@ export interface ScoutingStats {
 /**
  * Get comprehensive scouting statistics
  */
+export interface ContactedUser {
+  id: string;
+  x_handle: string | null;
+  display_name: string | null;
+  telegram_handle: string | null;
+  contacted_at: string | null;
+  notes: string | null;
+  location: string | null;
+  verified: boolean;
+  kaito_rank: number | null;
+  cookie_rank: number | null;
+  ethos_rank: number | null;
+  followers: number | null;
+}
+
+/**
+ * Get all users with 'contacted' status for drill-down view
+ */
+export async function getContactedUsers(): Promise<ContactedUser[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select(`
+      id,
+      x_handle,
+      display_name,
+      telegram_handle,
+      contacted_at,
+      notes,
+      infofi_profiles (
+        location,
+        verified,
+        kaito_rank,
+        cookie_rank,
+        ethos_rank,
+        followers
+      )
+    `)
+    .eq('status', 'contacted')
+    .order('contacted_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching contacted users:', error);
+    return [];
+  }
+
+  return (data || []).map((user: any) => ({
+    id: user.id,
+    x_handle: user.x_handle,
+    display_name: user.display_name,
+    telegram_handle: user.telegram_handle,
+    contacted_at: user.contacted_at,
+    notes: user.notes,
+    location: user.infofi_profiles?.[0]?.location || null,
+    verified: user.infofi_profiles?.[0]?.verified || false,
+    kaito_rank: user.infofi_profiles?.[0]?.kaito_rank || null,
+    cookie_rank: user.infofi_profiles?.[0]?.cookie_rank || null,
+    ethos_rank: user.infofi_profiles?.[0]?.ethos_rank || null,
+    followers: user.infofi_profiles?.[0]?.followers || null,
+  }));
+}
+
 export async function getScoutingStats(): Promise<ScoutingStats> {
   // Fetch counts in parallel
   const [

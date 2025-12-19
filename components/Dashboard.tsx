@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { DollarSign, Users, UserX, UserPlus, TrendingUp, Search, CheckCircle, Trophy, Loader2, Globe } from 'lucide-react';
+import { DollarSign, Users, UserX, UserPlus, TrendingUp, Search, CheckCircle, Trophy, Loader2, Globe, ChevronRight } from 'lucide-react';
+import ContactedUsersModal from './ContactedUsersModal';
 import { 
   getDealTakers, 
   getDormantInfluencers, 
@@ -19,11 +20,16 @@ interface DashboardStats {
   topEarners: { name: string; value: number }[];
 }
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onNavigateToDiscovery?: (filter?: string) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onNavigateToDiscovery }) => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [scoutingStats, setScoutingStats] = useState<ScoutingStats | null>(null);
   const [locations, setLocations] = useState<LocationStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showContactedModal, setShowContactedModal] = useState(false);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -65,20 +71,52 @@ const Dashboard: React.FC = () => {
 
   const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#475569'];
 
-  const StatCard = ({ title, value, subtext, icon: Icon, colorClass }: any) => (
-    <div className="bg-slate-900 border border-slate-800 p-5 rounded-lg">
-      <div className="flex justify-between items-start mb-2">
-        <div>
-          <p className="text-slate-400 text-xs font-mono uppercase tracking-widest mb-1">{title}</p>
-          <h2 className="text-2xl font-bold text-slate-100">{value}</h2>
+  const StatCard = ({ title, value, subtext, icon: Icon, colorClass, onClick, isHighlighted, highlightColor = 'blue' }: any) => {
+    const hasData = onClick && parseInt(String(value).replace(/,/g, '')) > 0;
+    const highlightClasses = hasData 
+      ? `bg-${highlightColor}-500/5 border-${highlightColor}-500/40 hover:border-${highlightColor}-400 hover:bg-${highlightColor}-500/10 shadow-lg shadow-${highlightColor}-500/10`
+      : '';
+    
+    return (
+      <div 
+        className={`relative bg-slate-900 border border-slate-800 p-5 rounded-lg transition-all duration-300 ${
+          onClick ? 'cursor-pointer' : ''
+        } ${hasData ? highlightClasses : onClick ? 'hover:border-slate-600' : ''} ${
+          hasData ? 'animate-pulse-subtle' : ''
+        }`}
+        onClick={onClick}
+        style={hasData ? {
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(15, 23, 42, 1) 100%)',
+          borderColor: 'rgba(59, 130, 246, 0.4)',
+          boxShadow: '0 0 20px rgba(59, 130, 246, 0.15), inset 0 1px 0 rgba(59, 130, 246, 0.1)'
+        } : {}}
+      >
+        {/* Glow effect for highlighted cards */}
+        {hasData && (
+          <div className="absolute inset-0 rounded-lg bg-blue-500/5 animate-pulse" style={{ animationDuration: '2s' }} />
+        )}
+        
+        <div className="relative flex justify-between items-start mb-2">
+          <div>
+            <p className="text-slate-400 text-xs font-mono uppercase tracking-widest mb-1">{title}</p>
+            <h2 className={`text-2xl font-bold ${hasData ? 'text-blue-100' : 'text-slate-100'}`}>{value}</h2>
+          </div>
+          <div className={`p-2 rounded-md bg-slate-950 border ${hasData ? 'border-blue-500/30 bg-blue-500/10' : 'border-slate-800'} ${colorClass}`}>
+            <Icon className="w-5 h-5" />
+          </div>
         </div>
-        <div className={`p-2 rounded-md bg-slate-950 border border-slate-800 ${colorClass}`}>
-          <Icon className="w-5 h-5" />
-        </div>
+        <p className="relative text-xs text-slate-500 font-mono">{subtext}</p>
+        
+        {/* Click indicator for highlighted cards */}
+        {hasData && (
+          <div className="relative mt-3 pt-2 border-t border-blue-500/20 flex items-center justify-between">
+            <span className="text-xs text-blue-400 font-medium">View details</span>
+            <ChevronRight className="w-4 h-4 text-blue-400 animate-bounce-x" />
+          </div>
+        )}
       </div>
-      <p className="text-xs text-slate-500 font-mono">{subtext}</p>
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -154,6 +192,7 @@ const Dashboard: React.FC = () => {
           subtext="Outreach in progress"
           icon={UserPlus}
           colorClass="text-blue-500"
+          onClick={() => setShowContactedModal(true)}
         />
       </div>
 
@@ -263,6 +302,16 @@ const Dashboard: React.FC = () => {
            </div>
         </div>
       </div>
+
+      {/* Contacted Users Modal */}
+      <ContactedUsersModal 
+        isOpen={showContactedModal}
+        onClose={() => setShowContactedModal(false)}
+        onViewAll={() => {
+          setShowContactedModal(false);
+          onNavigateToDiscovery?.('contacted');
+        }}
+      />
     </div>
   );
 };
